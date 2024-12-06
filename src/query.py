@@ -12,13 +12,12 @@ def initial_query():
         query {{
             boards(limit: 1 ids: ["{BOARD_ID}"]) {{
                 name
-                columns{{
-                    title
-                }}
+                
                 items_page(limit: 500) {{
                     cursor
                     items{{
                         name
+                        id
                         column_values {{
                         text
                         }}
@@ -36,13 +35,12 @@ def get_next_page(cursor):
     query {{
       boards(limit: 1 ids: ["{BOARD_ID}"]) {{
         name
-        columns{{
-            title
-        }}
+
       	items_page(limit: 500 cursor: "{cursor}") {{
           cursor
           items{{
             name
+            id
             column_values {{
               text
             }}

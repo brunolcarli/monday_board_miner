@@ -25,7 +25,25 @@ class Scraper:
         self.cursor = None
         self.last_run = datetime.now() - timedelta(days=1)
         self.dataframe = None
-        self.columns = None
+        self.columns = [
+            'Name',
+            'Subitems',
+            'Tutor messaged',
+            'Tutor confirmed',
+            'Confirmed tutor',
+            'Confirmation sent',
+            'FS FU 1',
+            'FS FU 2',
+            'FS FU 3',
+            'Tutor in contact with family',
+            'No response from family',
+            'First session date',
+            'First session occurred',
+            'Next action date',
+            'Next action',
+            'item_id'
+        ]
+        self.blacklist = ('Name', 'Apex responded to application', 'Subitems')
 
     def get_first_page(self):
         """
@@ -48,12 +66,10 @@ class Scraper:
         self.dataframe = None
         self.get_first_page()
         self.set_cursor(self.board['items_page']['cursor'])
-        self.columns = [i['title'] for i in self.board['columns']]
         logger.info('Scraper restored')
         logger.info(f'Monday board: {self.board["name"]}')
         logger.info(f'Cursor: {self.cursor}')
         logger.info(f'Last run: {str(self.last_run)}')
-        logger.info(f'Columns: {len(self.columns)}')
 
     def update_sheet(self):
         logger.info(f'[{str(datetime.now())}] Connecting to Google API')
@@ -87,13 +103,19 @@ class Scraper:
         self.reset()
 
         rows = []
+        last_name = None
         while self.cursor is not None:
             logger.info(f'Current cursor: {self.cursor}')
             for item in self.board['items_page']['items']:
-                row = [item['name']]
-                for value in item['column_values']:
-                    row.append(value['text'])
-                rows.append(row)
+                name, _id, col_vals = item.values()
+                if name in self.blacklist:
+                    continue
+                elif name == 'Unnamed':
+                    v = [j['text'] for j in col_vals[:len(self.columns)-2]]
+                    rows.append([last_name]+v+[_id])
+                else:
+                    last_name = name
+
             logger.info('requesting next page...')
             data = get_next_page(self.cursor)
             self.board = data['data']['boards'][0]
@@ -105,15 +127,19 @@ class Scraper:
         # since the last page returns a null cursor the last page wont execute inside the loop
         # so we process the last page outside the loop, otherwise tha last page data is lost
         for item in self.board['items_page']['items']:
-            row = [item['name']]
-            for value in item['column_values']:
-                row.append(value['text'])
-            rows.append(row)
+            name, _id, col_vals = item.values()
+            if name in self.blacklist:
+                continue
+            elif name == 'Unnamed':
+                v = [j['text'] for j in col_vals[:len(self.columns)-2]]
+                rows.append([last_name]+v+[_id])
+            else:
+                last_name = name
 
         logger.info(f'[{str(datetime.now())}] Total rows: {len(rows)}')
         logger.info('Building dataframe')
 
-        self.dataframe = pd.DataFrame(rows, columns=self.columns)
+        self.dataframe = pd.DataFrame(rows, columns=self.columns).replace('v', 'TRUE').replace('', 'FALSE').fillna('FALSE').drop_duplicates(subset=['Name'])
         self.update_sheet()
         self.last_run = datetime.now()
         runtime = time() - run_start
